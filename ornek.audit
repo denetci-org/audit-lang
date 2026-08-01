@@ -1,0 +1,175 @@
+// ---------- VERİ ----------
+
+audit: {
+  id: "AUD-2026-014",
+  title: "Satınalma Süreç Denetimi",
+  period: { from: "2026-01-01", to: "2026-06-30" },
+  team: { lead: "A. Yılmaz", auditors: ["M. Demir", "S. Kaya"] },
+  auditee: { unit: "Satınalma Müdürlüğü", owner: "K. Aksoy" },
+
+  scope: {
+    in: "Tedarikçi seçimi, onayı ve performans izleme",
+    out: "Sözleşme hukuku, ödeme süreçleri",
+    criteria: ["ISO 9001:2015 §8.4", "PR-SAT-01 v3"],
+    sampling: { n: 25, of: 412 }
+  },
+
+  findings: [
+    {
+      code: "F-01", severity: "major", status: "open",
+      title: "Onaysız tedarikçilerden alım",
+      criteria: "PR-SAT-01 §5.2 onaylı liste kontrolünü zorunlu kılar.",
+      condition: "İncelenen 25 siparişin 7'sinde kontrol kaydı yok.",
+      evidence: ["SIP-2026-0114", "SIP-2026-0233"],
+      cause: "ERP'de zorunlu alan tanımsız.",
+      recommend: "Sipariş ekranına hard-stop doğrulama eklenmesi.",
+      action: { owner: "BT / M. Ok", due: "2026-09-30", response: "accept" }
+    },
+    {
+      code: "F-02", severity: "minor", status: "closed",
+      title: "Performans değerlendirmesi gecikmesi",
+      criteria: "PR-SAT-01 §7.1 yıllık değerlendirme öngörür.",
+      condition: "2025 değerlendirmeleri 4 ay geç tamamlanmış.",
+      recommend: "Takvim ERP'ye bağlansın.",
+      action: { owner: "Satınalma", due: "2026-10-15", response: "partial" }
+    },
+    {
+      code: "F-03", severity: "major", status: "open",
+      title: "Tedarikçi dosyalarında eksik belge",
+      condition: "12 tedarikçinin 5'inde güncel vergi levhası yok.",
+      evidence: ["TED-DOSYA-2026"],
+      recommend: "Yıllık belge tazeleme hatırlatıcısı."
+    },
+    {
+      code: "F-04", severity: "ofi",
+      title: "Puan kartı otomasyonu",
+      recommend: "Manuel Excel yerine ERP raporu."
+    }
+  ],
+
+  conclusion: {
+    rating: "İyileştirme Gerekli",
+    text: "Kontroller tanımlı ancak sistemsel olarak zorlanmıyor."
+  }
+}
+
+// ---------- TÜRETİLMİŞ ----------
+
+acik:   audit.findings where status == "open"
+majors: audit.findings where severity == "major"
+
+// ---------- STİLLER ----------
+
+h1:    { size: 22, bold: true, after: 4 }
+h2:    { size: 14, bold: true, before: 22, after: 8 }
+h3:    { size: 12, bold: true, after: 6 }
+body:  { size: 11, color: "#333", line: 1.5 }
+muted: { size: 10, color: "#888", italic: true }
+label: { size: 10, bold: true, color: "#666", width: 90 }
+
+major: { color: "#b00020" }
+minor: { color: "#b26a00" }
+ofi:   { color: "#0a7d5a" }
+
+renk:  { major: major, minor: minor, ofi: ofi }
+ad:    { major: "Majör Uygunsuzluk", minor: "Minör Uygunsuzluk", ofi: "İyileştirme Fırsatı" }
+
+// ---------- YARDIMCILAR ----------
+
+function alan(baslik, deger, stil = body) {
+  if (!deger) { return }
+  row({ after: 4 }) {
+    print(baslik, { style: label })
+    print(deger, { style: stil })
+  }
+}
+
+function bulgu(f, n) {
+  box({ border: "#e2e2e2", pad: 14, radius: 4, after: 12 }) {
+    print("${n}. ${f.code} — ${f.title}", { style: style(h3, renk[f.severity]) })
+    print(ad[f.severity], { style: muted })
+
+    alan("Kriter", f.criteria)
+    alan("Durum", f.condition)
+    alan("Kanıt", join(f.evidence), muted)
+    alan("Kök neden", f.cause)
+    alan("Öneri", f.recommend)
+
+    if (f.action) {
+      alan("Aksiyon", "${f.action.owner} · ${date(f.action.due)}", muted)
+    } else if (f.severity == "major") {
+      print("! Majör bulgu için aksiyon tanımlanmamış.", { style: style(body, major) })
+    }
+  }
+}
+
+function bolum(baslik, liste, bos = "Bulunmamaktadır.") {
+  print(baslik, { style: h2 })
+  if (count(liste) == 0) {
+    print(bos, { style: muted })
+    return
+  }
+  i: 0
+  for (f in liste) {
+    i: i + 1
+    bulgu(f, i)
+  }
+}
+
+// ---------- BASIM ----------
+
+header({ center: audit.title, right: "Rev 1.2" })
+footer({ left: "Kuruma Özel", right: "Sayfa ${page} / ${pages}" })
+
+print(audit.title, { style: h1 })
+print("${audit.id} · ${date(audit.period.from)} – ${date(audit.period.to)}", { style: muted })
+
+print("Yönetici Özeti", { style: h2 })
+print("${count(audit.findings)} bulgu tespit edilmiştir: ${count(majors)} majör, ${count(acik)} tanesi açık durumdadır.", { style: body })
+
+if (count(majors) > 0) {
+  print("Majör uygunsuzluk mevcuttur; öncelikli aksiyon gerekmektedir.",
+        { style: style(body, major, { bold: true }) })
+} else {
+  print("Majör uygunsuzluk bulunmamaktadır.", { style: body })
+}
+
+print("Kapsam", { style: h2 })
+alan("Birim", audit.auditee.unit)
+alan("Dönem", "${date(audit.period.from)} – ${date(audit.period.to)}")
+alan("Kapsam içi", audit.scope.in)
+alan("Kapsam dışı", audit.scope.out, muted)
+alan("Örneklem", "${audit.scope.sampling.n} / ${audit.scope.sampling.of} sipariş", muted)
+
+print("Denetim kriterleri:", { style: style(body, { before: 8 }) })
+for (c in audit.scope.criteria) {
+  print("· ${c}", { style: body })
+}
+
+print("Bulgu Özeti", { style: h2 })
+table(audit.findings, {
+  headStyle: { size: 10, bold: true, color: "#666" },
+  border: "#e2e2e2",
+  zebra: "#fafafa"
+}) {
+  column("Kod", "code", { width: 60 })
+  column("Bulgu", "title")
+  column("Önem", (f) => ad[f.severity], {
+    width: 130,
+    style: (f) => renk[f.severity]
+  })
+  column("Sorumlu", "action.owner", { width: 110 })
+  column("Termin", (f) => date(f.action.due), { width: 90, align: "right" })
+}
+
+newpage()
+
+bolum("Majör Bulgular", majors)
+bolum("Minör Bulgular", audit.findings where severity == "minor")
+bolum("İyileştirme Fırsatları", audit.findings where severity == "ofi",
+      "Bu denetimde iyileştirme fırsatı kaydedilmemiştir.")
+
+print("Sonuç", { style: h2 })
+alan("Değerlendirme", audit.conclusion.rating)
+print(audit.conclusion.text, { style: body })
+print("Baş denetçi: ${audit.team.lead} · ${join(audit.team.auditors)}", { style: muted })

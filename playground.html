@@ -1,0 +1,1203 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audit-lang — deneme alanı</title>
+
+<style>
+  :root {
+    --ink:     #17242f;
+    --ink-2:   #4a5b6a;
+    --paper:   #e7ecf0;
+    --surface: #fbfcfd;
+    --rule:    #c5d0da;
+    --accent:  #24707e;
+    --stamp:   #a5333c;
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, "Helvetica Neue", Arial, sans-serif;
+    --lh: 20px;
+    --fs: 13px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+  }
+
+  /* ---------- üst şerit ---------- */
+
+  .bar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 16px; height: 46px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--rule);
+  }
+  .mark {
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .mark span { color: var(--ink-2); font-weight: 400; }
+
+  .grow { flex: 1; }
+
+  .field { display: flex; align-items: center; gap: 8px; }
+
+  label.cap, .cap {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: .14em;
+    color: var(--ink-2);
+  }
+
+  select, button {
+    font-family: var(--sans); font-size: 12px; color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 5px 9px;
+    cursor: pointer;
+  }
+  select:hover, button:hover { border-color: var(--accent); }
+  select:focus-visible, button:focus-visible,
+  textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .stamp {
+    font-family: var(--mono);
+    font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    padding: 4px 8px; border-radius: 2px;
+    white-space: nowrap;
+  }
+  .stamp[data-state="hata"] { color: var(--stamp); border-color: var(--stamp); }
+
+  /* ---------- iki bölme ---------- */
+
+  .panes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 17px minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  /* zımba deliği dikişi */
+  .seam {
+    background-image: repeating-linear-gradient(
+      to bottom, var(--rule) 0 5px, transparent 5px 11px);
+    background-size: 1px 100%;
+    background-position: center;
+    background-repeat: repeat-y;
+  }
+
+  .pane { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; min-width: 0; }
+
+  .pane > .cap {
+    padding: 9px 14px 8px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+
+  /* ---------- düzenleyici ---------- */
+
+  .editor {
+    position: relative;
+    display: grid; grid-template-columns: 46px minmax(0, 1fr);
+    background: var(--surface);
+    min-height: 0;
+    font: var(--fs)/var(--lh) var(--mono);
+  }
+
+  .gutter {
+    position: relative; overflow: hidden;
+    border-right: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    user-select: none;
+  }
+  .gutter-inner { padding: 12px 8px 12px 0; will-change: transform; }
+  .gutter b { display: block; font-weight: 400; }
+  .gutter b.bad { color: var(--stamp); font-weight: 600; }
+
+  .code { position: relative; overflow: hidden; }
+
+  .code pre, .code textarea {
+    margin: 0; padding: 12px 14px;
+    font: inherit;
+    white-space: pre;
+    tab-size: 2;
+    border: 0;
+  }
+  .code pre {
+    position: absolute; inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--ink);
+  }
+  .code textarea {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    resize: none;
+    background: transparent;
+    color: transparent;
+    caret-color: var(--ink);
+    overflow: auto;
+  }
+  .code textarea::selection { background: #cfe3e6; }
+
+  /* renklendirme */
+  .t-com { color: #8a9aa8; font-style: italic; }
+  .t-str { color: #3f7a63; }
+  .t-num { color: #9a6425; }
+  .t-kw  { color: var(--ink); font-weight: 600; }
+  .t-fn  { color: var(--accent); }
+  .t-key { color: var(--ink-2); }
+
+  /* ---------- hata şeridi ---------- */
+
+  .err {
+    display: none;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.5;
+    color: var(--stamp);
+    background: #fbf3f4;
+    border-top: 1px solid var(--stamp);
+    padding: 9px 14px;
+  }
+  .err[data-on] { display: block; }
+
+  /* ---------- önizleme ---------- */
+
+  .preview { background: #fff; min-height: 0; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
+
+  .hint { font-family: var(--mono); font-size: 10px; color: var(--ink-2); }
+
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    .panes { grid-template-columns: 1fr; grid-template-rows: 60vh 17px 60vh; }
+    .seam {
+      background-image: repeating-linear-gradient(
+        to right, var(--rule) 0 5px, transparent 5px 11px);
+      background-size: 100% 1px;
+      background-position: center;
+      background-repeat: repeat-x;
+    }
+    .bar { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 10px; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    select, button { transition: border-color .12s ease; }
+  }
+</style>
+
+<body>
+
+<div class="bar">
+  <div class="mark">audit-lang <span>/ deneme alanı</span></div>
+
+  <div class="field">
+    <label class="cap" for="ornek">Örnek</label>
+    <select id="ornek"></select>
+  </div>
+
+  <div class="grow"></div>
+
+  <div class="stamp" id="durum">hazır</div>
+  <button id="derle">Derle</button>
+  <button id="indir">HTML indir</button>
+</div>
+
+<div class="panes">
+
+  <section class="pane">
+    <div class="cap">
+      <span>Kaynak</span>
+      <span class="hint">⌘/Ctrl + ↵ derler</span>
+    </div>
+
+    <div class="editor">
+      <div class="gutter"><div class="gutter-inner" id="gutter"></div></div>
+      <div class="code">
+        <pre id="hl" aria-hidden="true"></pre>
+        <textarea id="src" spellcheck="false" autocapitalize="off"
+                  autocomplete="off" autocorrect="off"
+                  aria-label="Rapor kaynağı"></textarea>
+      </div>
+    </div>
+
+    <div class="err" id="hata"></div>
+  </section>
+
+  <div class="seam" aria-hidden="true"></div>
+
+  <section class="pane">
+    <div class="cap">
+      <span>Çıktı</span>
+      <span class="hint" id="olcu"></span>
+    </div>
+    <div class="preview"><iframe id="onizleme" title="Rapor önizlemesi"></iframe></div>
+  </section>
+
+</div>
+
+<script>
+/* ================= dil ================= */
+/* =============================================================
+   audit-lang — küçük bir rapor dili
+   sözcükleyici → çözümleyici → yorumlayıcı → HTML
+   kullanım: node audit-lang.js ornek.audit > rapor.html
+   ============================================================= */
+
+/* ---------------------------------------------------------------
+   1. SÖZCÜKLEYİCİ (lexer)
+   --------------------------------------------------------------- */
+
+const KW = new Set(['function', 'if', 'else', 'for', 'in', 'where',
+                    'return', 'true', 'false', 'null']);
+
+const PUNCS = ['==', '!=', '<=', '>=', '&&', '||', '=>',
+               '+', '-', '*', '/', '%', '<', '>', '!', '=',
+               ':', ',', '.', '(', ')', '{', '}', '[', ']'];
+
+const ID = /[\p{L}_]/u, IDN = /[\p{L}\p{N}_]/u;
+
+function tokenize(src) {
+  const T = [];
+  let i = 0, line = 1;
+
+  while (i < src.length) {
+    const c = src[i];
+
+    if (c === '\n') { line++; i++; continue; }
+    if (/\s/.test(c) || c === ';') { i++; continue; }   // ; isteğe bağlı
+
+    if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] === '\n') line++;
+        i++;
+      }
+      i += 2; continue;
+    }
+
+    if (c === '"' || c === "'") {
+      const [parts, next] = scanString(src, i);
+      T.push({ t: 'str', parts, line }); i = next; continue;
+    }
+
+    if (/[0-9]/.test(c)) {
+      let j = i;
+      while (j < src.length && /[0-9.]/.test(src[j])) j++;
+      T.push({ t: 'num', v: parseFloat(src.slice(i, j)), line }); i = j; continue;
+    }
+
+    if (ID.test(c)) {
+      let j = i;
+      while (j < src.length && IDN.test(src[j])) j++;
+      const w = src.slice(i, j);
+      T.push({ t: KW.has(w) ? w : 'ident', v: w, line }); i = j; continue;
+    }
+
+    const p = PUNCS.find(p => src.startsWith(p, i));
+    if (!p) throw new SyntaxError(`Beklenmeyen karakter '${c}' — satır ${line}`);
+    T.push({ t: p, line }); i += p.length;
+  }
+
+  T.push({ t: 'eof', line });
+  return T;
+}
+
+/* "metin ${ifade} ve ${f(x)}" → parça listesi; süssüz $ düz metindir */
+function scanString(src, i) {
+  const q = src[i++];
+  const parts = [];
+  let buf = '';
+
+  while (i < src.length && src[i] !== q) {
+    if (src[i] === '\\') { buf += src[i + 1]; i += 2; continue; }
+
+    // ${ ... }
+    if (src[i] === '$' && src[i + 1] === '{') {
+      if (buf) { parts.push({ t: 'text', v: buf }); buf = ''; }
+      let j = i + 2, depth = 1, inQ = null;
+      while (j < src.length && depth) {
+        const ch = src[j];
+        if (inQ) { if (ch === '\\') j++; else if (ch === inQ) inQ = null; }
+        else if (ch === '"' || ch === "'") inQ = ch;
+        else if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        if (depth) j++;
+      }
+      parts.push({ t: 'expr', src: src.slice(i + 2, j) });
+      i = j + 1; continue;
+    }
+
+    buf += src[i++];
+  }
+
+  if (buf) parts.push({ t: 'text', v: buf });
+  return [parts, i + 1];
+}
+
+/* ---------------------------------------------------------------
+   2. ÇÖZÜMLEYİCİ (parser)
+   --------------------------------------------------------------- */
+
+const BIN = {
+  where: 1,
+  '||': 2, '&&': 3,
+  '==': 4, '!=': 4,
+  '<': 5, '>': 5, '<=': 5, '>=': 5,
+  '+': 6, '-': 6,
+  '*': 7, '/': 7, '%': 7,
+};
+
+class Parser {
+  constructor(toks) { this.T = toks; this.i = 0; }
+
+  peek(k = 0) { return this.T[this.i + k]; }
+  at(t) { return this.peek().t === t; }
+  next() { return this.T[this.i++]; }
+  eat(t) { return this.at(t) ? this.next() : null; }
+  expect(t) {
+    if (this.at(t)) return this.next();
+    const g = this.peek();
+    throw new SyntaxError(`'${t}' bekleniyordu, '${g.v ?? g.t}' bulundu — satır ${g.line}`);
+  }
+
+  program() {
+    const body = [];
+    while (!this.at('eof')) body.push(this.statement());
+    return { k: 'Block', body };
+  }
+
+  /* ---- deyimler ---- */
+
+  statement() {
+    if (this.at('function')) {
+      this.next();
+      const name = this.expect('ident').v;
+      return { k: 'Bind', name, value: { k: 'Fn', params: this.params(), body: this.block() } };
+    }
+    if (this.at('if')) return this.ifStmt();
+    if (this.at('for')) return this.forStmt();
+    if (this.at('return')) {
+      this.next();
+      const bare = this.at('}') || this.at('eof');
+      return { k: 'Return', value: bare ? null : this.expression() };
+    }
+    // ad: değer
+    if (this.at('ident') && this.peek(1).t === ':') {
+      const name = this.next().v;
+      this.next();
+      return { k: 'Bind', name, value: this.expression() };
+    }
+    return { k: 'Expr', expr: this.expression() };
+  }
+
+  ifStmt() {
+    this.expect('if'); this.expect('(');
+    const test = this.expression();
+    this.expect(')');
+    const cons = this.block();
+    let alt = null;
+    if (this.eat('else')) alt = this.at('if') ? this.ifStmt() : this.block();
+    return { k: 'If', test, cons, alt };
+  }
+
+  forStmt() {
+    this.expect('for'); this.expect('(');
+    const name = this.expect('ident').v;
+    this.expect('in');
+    const list = this.expression();
+    this.expect(')');
+    return { k: 'For', name, list, body: this.block() };
+  }
+
+  block() {
+    this.expect('{');
+    const body = [];
+    while (!this.at('}')) body.push(this.statement());
+    this.expect('}');
+    return { k: 'Block', body };
+  }
+
+  params() {
+    this.expect('(');
+    const ps = [];
+    while (!this.at(')')) {
+      const name = this.expect('ident').v;
+      const def = this.eat('=') ? this.expression() : null;
+      ps.push({ name, def });
+      if (!this.eat(',')) break;
+    }
+    this.expect(')');
+    return ps;
+  }
+
+  /* ---- ifadeler (Pratt) ---- */
+
+  expression(min = 0) {
+    let left = this.unary();
+    for (;;) {
+      const op = this.peek().t;
+      const prec = BIN[op];
+      if (prec === undefined || prec <= min) return left;
+      this.next();
+      left = op === 'where'
+        ? { k: 'Where', list: left, pred: this.expression(prec) }
+        : { k: 'Bin', op, left, right: this.expression(prec) };
+    }
+  }
+
+  unary() {
+    if (this.at('!') || this.at('-')) {
+      const op = this.next().t;
+      return { k: 'Un', op, arg: this.unary() };
+    }
+    return this.postfix(this.primary());
+  }
+
+  postfix(node) {
+    for (;;) {
+      if (this.eat('.')) {
+        const t = this.next();                    // anahtar sözcük de alan adı olabilir
+        node = { k: 'Member', obj: node, name: t.v ?? t.t };
+      } else if (this.eat('[')) {
+        const index = this.expression();
+        this.expect(']');
+        node = { k: 'Index', obj: node, index };
+      } else if (this.at('(')) {
+        const args = this.args();
+        if (this.at('{')) args.push(this.block());
+        node = { k: 'Call', callee: node, args };
+      } else return node;
+    }
+  }
+
+  args() {
+    this.expect('(');
+    const a = [];
+    while (!this.at(')')) {
+      const line = this.peek().line;
+      const arg = this.expression();
+      if (arg.k === 'Block') {
+        throw new SyntaxError(`Çağrı bloğu parantez dışında yazılmalı — satır ${line}`);
+      }
+      a.push(arg);
+      if (!this.eat(',')) break;
+    }
+    this.expect(')');
+    return a;
+  }
+
+  primary() {
+    const t = this.peek();
+    switch (t.t) {
+      case 'num':   this.next(); return { k: 'Lit', v: t.v };
+      case 'true':  this.next(); return { k: 'Lit', v: true };
+      case 'false': this.next(); return { k: 'Lit', v: false };
+      case 'null':  this.next(); return { k: 'Lit', v: null };
+      case 'ident': this.next(); return { k: 'Ref', name: t.v };
+      case 'str':
+        this.next();
+        return {
+          k: 'Str',
+          parts: t.parts.map(p => p.t === 'text' ? p : { t: 'expr', node: parseExpr(p.src) }),
+        };
+      case '[': {
+        this.next();
+        const items = [];
+        while (!this.at(']')) { items.push(this.expression()); if (!this.eat(',')) break; }
+        this.expect(']');
+        return { k: 'Arr', items };
+      }
+      case '{': return this.braces();
+      case '(': return this.parenOrArrow();
+    }
+    throw new SyntaxError(`Beklenmeyen '${t.v ?? t.t}' — satır ${t.line}`);
+  }
+
+  /* { } hem obje hem blok:  ilk eleman "anahtar:" ise obje, değilse blok */
+  braces() {
+    const a = this.peek(1), b = this.peek(2);
+    const looksObject =
+      a.t === '}' ||
+      ((a.t === 'ident' || a.t === 'str' || KW.has(a.t)) && b.t === ':');
+    return looksObject ? this.object() : this.block();
+  }
+
+  object() {
+    this.expect('{');
+    const props = [];
+    while (!this.at('}')) {
+      const t = this.next();
+      const key = t.t === 'str'
+        ? t.parts.map(p => p.v ?? '').join('')
+        : (t.v ?? t.t);
+      this.expect(':');
+      props.push({ key, value: this.expression() });
+      if (!this.eat(',')) break;
+    }
+    this.expect('}');
+    return { k: 'Obj', props };
+  }
+
+  /* (a, b) => { }   ya da   (ifade) */
+  parenOrArrow() {
+    const save = this.i;
+    try {
+      const params = this.params();
+      if (this.eat('=>')) {
+        // gövde blok da olabilir, tek ifade de:  (f) => renk[f.severity]
+        const b = this.at('{') ? this.braces() : this.expression();
+        const body = b.k === 'Block' ? b : { k: 'Block', body: [{ k: 'Return', value: b }] };
+        return { k: 'Fn', params, body };
+      }
+    } catch { /* geri sar */ }
+    this.i = save;
+    this.expect('(');
+    const e = this.expression();
+    this.expect(')');
+    return e;
+  }
+}
+
+const parse     = src => new Parser(tokenize(src)).program();
+const parseExpr = src => new Parser(tokenize(src)).expression();
+
+/* ---------------------------------------------------------------
+   3. YORUMLAYICI (interpreter)
+   --------------------------------------------------------------- */
+
+class Return { constructor(v) { this.v = v; } }
+
+class Scope {
+  constructor(parent = null, vars = {}, soft = false) {
+    this.vars = new Map(Object.entries(vars));
+    this.parent = parent;
+    this.soft = soft;               // where içinde: olmayan alan hata değil, boş değer
+  }
+  get(n) {
+    for (let s = this; s; s = s.parent) if (s.vars.has(n)) return s.vars.get(n);
+    if (this.soft) return undefined;
+    throw new Error(`Tanımsız değişken: ${n}`);
+  }
+  set(n, v) {                       // varsa bulunduğu kapsamda güncelle, yoksa burada tanımla
+    for (let s = this; s; s = s.parent) if (s.vars.has(n)) { s.vars.set(n, v); return; }
+    this.vars.set(n, v);
+  }
+  define(n, v) { this.vars.set(n, v); }
+}
+
+const truthy = v => {
+  if (v == null || v === false || v === 0 || v === '') return false;
+  if (Array.isArray(v)) return v.length > 0;
+  return true;
+};
+
+const text = v =>
+  v == null ? '' : Array.isArray(v) ? v.join(', ') : String(v);
+
+const AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
+               'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+
+function formatDate(v, fmt = 'd MMM yyyy') {
+  if (v == null) return '';
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return String(v);
+  const [, Y, M, D] = m;
+  const map = { yyyy: Y, MMM: AYLAR[+M - 1], MM: M, dd: D, d: String(+D) };
+  return fmt.replace(/yyyy|MMM|MM|dd|d/g, t => map[t]);
+}
+
+class Interp {
+  constructor() {
+    this.doc = { header: null, footer: null, children: [] };
+    this.stack = [this.doc.children];
+    this.columnStack = [];
+    this.global = new Scope(null, this.builtins());
+  }
+
+  run(src) {
+    const ast = parse(src);
+    for (const st of ast.body) this.exec(st, this.global);
+    return this.doc;
+  }
+
+  /* --- çıktı yığını --- */
+  emit(node) { this.stack.at(-1).push(node); }
+
+  collect(block) {
+    const kids = [];
+    this.stack.push(kids);
+    try { this.callBlock(block); } finally { this.stack.pop(); }
+    return kids;
+  }
+
+  callBlock(b) {
+    if (!b || !b.__block) return;
+    const sc = new Scope(b.scope);
+    for (const st of b.node.body) this.exec(st, sc);
+  }
+
+  /* --- gömülü fonksiyonlar --- */
+  builtins() {
+    const I = this;
+
+    const requiredBlock = (name, opts, blk) => {
+      if (opts && opts.__block) { blk = opts; opts = {}; }  // name() { ... }
+      if (!blk || !blk.__block) throw new Error(`${name}(...) çağrısından sonra blok gerekli`);
+      return [opts || {}, blk];
+    };
+
+    const container = kind => (opts, blk) => {
+      [opts, blk] = requiredBlock(kind, opts, blk);
+      I.emit({ kind, opts, children: I.collect(blk) });
+    };
+
+    /* table(satirlar, seçenekler) { column(başlık, değer, seçenekler) }
+       değer : "alan" | "alan.altalan" | (satir) => değer
+       style : stil objesi | (satir) => stil objesi                         */
+    const cell = (col, row) => {
+      const g = col.value;
+      if (g && (typeof g === 'function' || g.__fn)) return I.call(g, [row]);
+      if (typeof g === 'string') return g.split('.').reduce((o, k) => o == null ? undefined : o[k], row);
+      return undefined;
+    };
+    const cellStyle = (col, row) => {
+      const s = col.style;
+      return (s && (typeof s === 'function' || s.__fn)) ? I.call(s, [row]) : (s || {});
+    };
+
+    return {
+      print:   (v, opts) => I.emit({ kind: 'text', value: text(v), opts: opts || {} }),
+      box:     container('box'),
+      row:     container('row'),
+      col:     container('col'),
+
+      column:  (head, value, opts = {}) => {
+        const cols = I.columnStack.at(-1);
+        if (!cols) throw new Error('column(...) yalnızca table(...) { ... } içinde kullanılabilir');
+        cols.push({ ...(opts || {}), head, value });
+      },
+
+      table:   (rows, opts, blk) => {
+        [opts, blk] = requiredBlock('table', opts, blk);
+        if (Object.hasOwn(opts, 'cols')) {
+          throw new Error("table seçeneklerinde 'cols' kullanılamaz; sütunları blok içinde column(...) ile tanımla");
+        }
+
+        const cols = [];
+        I.columnStack.push(cols);
+        let stray;
+        try { stray = I.collect(blk); }
+        finally { I.columnStack.pop(); }
+
+        if (stray.length) {
+          throw new Error('table bloğunda yalnızca column(...) tanımları kullanılabilir');
+        }
+        if (!cols.length) throw new Error('table bloğunda en az bir column(...) gerekli');
+
+        I.emit({
+          kind: 'table',
+          opts,
+          cols: cols.map(c => ({ head: text(c.head ?? ''), width: c.width, align: c.align })),
+          rows: (rows || []).map(r => cols.map(c => ({
+            text: text(cell(c, r)),
+            style: cellStyle(c, r),
+          }))),
+        });
+      },
+
+      header:  o => { I.doc.header = o || {}; },
+      footer:  o => { I.doc.footer = o || {}; },
+      newpage: () => I.emit({ kind: 'pagebreak' }),
+
+      style: (...o) => Object.assign({}, ...o),
+      count: x => Array.isArray(x) ? x.length : (x == null ? 0 : 1),
+      join:  (a, sep = ', ') => (a || []).join(sep),
+      sum:   (a, key) => (a || []).reduce((t, x) => t + (Number(key ? x[key] : x) || 0), 0),
+      upper: s => text(s).toLocaleUpperCase('tr'),
+      lower: s => text(s).toLocaleLowerCase('tr'),
+      date:  formatDate,
+
+      page: '{page}', pages: '{pages}',
+    };
+  }
+
+  /* --- deyim çalıştırma --- */
+  exec(n, sc) {
+    switch (n.k) {
+      case 'Bind':   sc.set(n.name, this.eval(n.value, sc)); return;
+      case 'Expr':   this.eval(n.expr, sc); return;
+      case 'Return': throw new Return(n.value ? this.eval(n.value, sc) : undefined);
+
+      case 'If':
+        if (truthy(this.eval(n.test, sc))) this.body(n.cons.body, new Scope(sc));
+        else if (n.alt) {
+          if (n.alt.k === 'If') this.exec(n.alt, sc);
+          else this.body(n.alt.body, new Scope(sc));
+        }
+        return;
+
+      case 'For': {
+        const list = this.eval(n.list, sc) || [];
+        for (const item of list) {
+          const s = new Scope(sc);
+          s.define(n.name, item);
+          this.body(n.body.body, s);
+        }
+        return;
+      }
+    }
+    throw new Error(`Bilinmeyen deyim: ${n.k}`);
+  }
+
+  body(stmts, sc) { for (const st of stmts) this.exec(st, sc); }
+
+  /* --- ifade değerlendirme --- */
+  eval(n, sc) {
+    switch (n.k) {
+      case 'Lit':    return n.v;
+      case 'Ref':    return sc.get(n.name);
+      case 'Str':    return n.parts
+                       .map(p => p.t === 'text' ? p.v : text(this.eval(p.node, sc)))
+                       .join('');
+      case 'Arr':    return n.items.map(x => this.eval(x, sc));
+      case 'Obj': {
+        const o = {};
+        for (const p of n.props) o[p.key] = this.eval(p.value, sc);
+        return o;
+      }
+      case 'Fn':     return { __fn: true, params: n.params, body: n.body, scope: sc };
+      case 'Block':  return { __block: true, node: n, scope: sc };
+
+      case 'Member': { const o = this.eval(n.obj, sc); return o == null ? undefined : o[n.name]; }
+      case 'Index':  { const o = this.eval(n.obj, sc); return o == null ? undefined : o[this.eval(n.index, sc)]; }
+      case 'Un': {
+        const v = this.eval(n.arg, sc);
+        return n.op === '!' ? !truthy(v) : -Number(v);
+      }
+      case 'Bin':    return this.binop(n, sc);
+
+      case 'Where': {
+        const list = this.eval(n.list, sc) || [];
+        return list.filter(item => {
+          const fields = (item && typeof item === 'object') ? item : {};
+          return truthy(this.eval(n.pred, new Scope(sc, { ...fields, it: item }, true)));
+        });
+      }
+
+      case 'Call':
+        return this.call(this.eval(n.callee, sc), n.args.map(a => this.eval(a, sc)));
+    }
+    throw new Error(`Bilinmeyen ifade: ${n.k}`);
+  }
+
+  binop(n, sc) {
+    const L = () => this.eval(n.left, sc);
+    const R = () => this.eval(n.right, sc);
+    switch (n.op) {
+      case '&&': return truthy(L()) ? R() : false;
+      case '||': { const l = L(); return truthy(l) ? l : R(); }
+      case '==': return L() === R();
+      case '!=': return L() !== R();
+      case '<':  return L() <  R();
+      case '>':  return L() >  R();
+      case '<=': return L() <= R();
+      case '>=': return L() >= R();
+      case '+':  { const l = L(), r = R();
+                   return (typeof l === 'string' || typeof r === 'string') ? text(l) + text(r) : l + r; }
+      case '-':  return L() - R();
+      case '*':  return L() * R();
+      case '/':  return L() / R();
+      case '%':  return L() % R();
+    }
+  }
+
+  call(f, args) {
+    if (typeof f === 'function') return f(...args);
+    if (f && f.__fn) {
+      const sc = new Scope(f.scope);
+      f.params.forEach((p, i) => {
+        const v = args[i] !== undefined ? args[i] : (p.def ? this.eval(p.def, sc) : undefined);
+        sc.define(p.name, v);
+      });
+      try { this.body(f.body.body, sc); }
+      catch (e) { if (e instanceof Return) return e.v; throw e; }
+      return undefined;
+    }
+    throw new Error('Çağrılabilir bir değer değil');
+  }
+}
+
+/* ---------------------------------------------------------------
+   4. HTML ÜRETİCİ (renderer)
+   --------------------------------------------------------------- */
+
+const CSS = {
+  size:   v => `font-size:${v}px`,
+  color:  v => `color:${v}`,
+  bold:   v => `font-weight:${v ? 700 : 400}`,
+  italic: v => v ? 'font-style:italic' : '',
+  line:   v => `line-height:${v}`,
+  before: v => `margin-top:${v}px`,
+  after:  v => `margin-bottom:${v}px`,
+  width:  v => `flex:0 0 ${v}px`,
+  align:  v => `text-align:${v}`,
+  border: v => `border:1px solid ${v}`,
+  pad:    v => `padding:${v}px`,
+  radius: v => `border-radius:${v}px`,
+  bg:     v => `background:${v}`,
+  font:   v => `font-family:${v}`,
+};
+
+/* { style: h1, align: "right" } → tek düz stil objesi */
+const flatten = (opts = {}) => {
+  const { style, ...rest } = opts;
+  return { ...(style || {}), ...rest };
+};
+
+const css = obj =>
+  Object.entries(obj)
+    .filter(([k, v]) => CSS[k] && v !== undefined && v !== null)
+    .map(([k, v]) => CSS[k](v))
+    .filter(Boolean)
+    .join(';');
+
+function renderTable(n) {
+  const o = n.opts;
+  const border = o.border ?? '#e2e2e2';
+  const pad = o.pad ?? 8;
+
+  /* hücre: genişlik/hizalama sütundan, geri kalan stil objesinden */
+  const cellCss = (style = {}, col = {}, rule = 1) => {
+    const { width, ...rest } = style;
+    return [
+      col.width ? `width:${col.width}px` : '',
+      `text-align:${col.align || 'left'}`,
+      `padding:${pad}px`,
+      `border-bottom:${rule}px solid ${border}`,
+      css({ ...(o.cellStyle || {}), ...rest }),
+    ].filter(Boolean).join(';');
+  };
+
+  const headStyle = o.headStyle || { size: 10, bold: true, color: '#666' };
+  const head = n.cols
+    .map(c => `<th style="${cellCss(headStyle, c, 2)}">${esc(c.head)}</th>`)
+    .join('');
+
+  const rows = n.rows.map((r, i) => {
+    const zebra = o.zebra && i % 2 ? `background:${o.zebra};` : '';
+    const tds = r
+      .map((cell, j) => `<td style="${zebra}${cellCss(cell.style, n.cols[j])}">${esc(cell.text)}</td>`)
+      .join('');
+    return `<tr>${tds}</tr>`;
+  }).join('\n');
+
+  const outer = css({ before: o.before, after: o.after ?? 12 });
+  return `<table style="width:100%;border-collapse:collapse;font-size:11px;${outer}">
+<thead><tr>${head}</tr></thead>
+<tbody>
+${rows}
+</tbody></table>`;
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+
+function renderNode(n, parent) {
+  if (n.kind === 'pagebreak') return '<div class="pb"></div>';
+  if (n.kind === 'table') return renderTable(n);
+
+  const st = flatten(n.opts);
+  const grow = parent === 'row' && st.width === undefined ? 'flex:1;' : '';
+
+  if (n.kind === 'text') return `<div style="${grow}${css(st)}">${esc(n.value)}</div>`;
+
+  const layout = n.kind === 'row' ? 'display:flex;gap:12px;align-items:baseline;' : '';
+  const kids = n.children.map(c => renderNode(c, n.kind)).join('\n');
+  return `<div style="${grow}${layout}${css(st)}">\n${kids}\n</div>`;
+}
+
+function renderBar(bar) {
+  if (!bar) return '';
+  const cell = (v, align) =>
+    `<div style="flex:1;text-align:${align}">${v ? esc(text(v)) : ''}</div>`;
+  return `<div class="bar" style="display:flex">${
+    cell(bar.left, 'left')}${cell(bar.center, 'center')}${cell(bar.right, 'right')}</div>`;
+}
+
+function toHTML(doc) {
+  return `<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; }
+  .bar { font-size: 10px; color: #888; padding: 8px 0; }
+  .bar:first-of-type { border-bottom: 1px solid #eee; margin-bottom: 24px; }
+  .bar:last-of-type  { border-top: 1px solid #eee; margin-top: 24px; }
+  .pb  { break-after: page; height: 24px; }
+</style>
+${renderBar(doc.header)}
+${doc.children.map(c => renderNode(c, null)).join('\n')}
+${renderBar(doc.footer)}
+`;
+}
+
+/* ---------------------------------------------------------------
+   5. GİRİŞ NOKTASI
+   --------------------------------------------------------------- */
+
+function compile(src) {
+  return toHTML(new Interp().run(src));
+}
+
+
+
+/* ================= örnekler ================= */
+const ORNEKLER = {
+  "Tam rapor": "// ---------- VERİ ----------\n\naudit: {\n  id: \"AUD-2026-014\",\n  title: \"Satınalma Süreç Denetimi\",\n  period: { from: \"2026-01-01\", to: \"2026-06-30\" },\n  team: { lead: \"A. Yılmaz\", auditors: [\"M. Demir\", \"S. Kaya\"] },\n  auditee: { unit: \"Satınalma Müdürlüğü\", owner: \"K. Aksoy\" },\n\n  scope: {\n    in: \"Tedarikçi seçimi, onayı ve performans izleme\",\n    out: \"Sözleşme hukuku, ödeme süreçleri\",\n    criteria: [\"ISO 9001:2015 §8.4\", \"PR-SAT-01 v3\"],\n    sampling: { n: 25, of: 412 }\n  },\n\n  findings: [\n    {\n      code: \"F-01\", severity: \"major\", status: \"open\",\n      title: \"Onaysız tedarikçilerden alım\",\n      criteria: \"PR-SAT-01 §5.2 onaylı liste kontrolünü zorunlu kılar.\",\n      condition: \"İncelenen 25 siparişin 7'sinde kontrol kaydı yok.\",\n      evidence: [\"SIP-2026-0114\", \"SIP-2026-0233\"],\n      cause: \"ERP'de zorunlu alan tanımsız.\",\n      recommend: \"Sipariş ekranına hard-stop doğrulama eklenmesi.\",\n      action: { owner: \"BT / M. Ok\", due: \"2026-09-30\", response: \"accept\" }\n    },\n    {\n      code: \"F-02\", severity: \"minor\", status: \"closed\",\n      title: \"Performans değerlendirmesi gecikmesi\",\n      criteria: \"PR-SAT-01 §7.1 yıllık değerlendirme öngörür.\",\n      condition: \"2025 değerlendirmeleri 4 ay geç tamamlanmış.\",\n      recommend: \"Takvim ERP'ye bağlansın.\",\n      action: { owner: \"Satınalma\", due: \"2026-10-15\", response: \"partial\" }\n    },\n    {\n      code: \"F-03\", severity: \"major\", status: \"open\",\n      title: \"Tedarikçi dosyalarında eksik belge\",\n      condition: \"12 tedarikçinin 5'inde güncel vergi levhası yok.\",\n      evidence: [\"TED-DOSYA-2026\"],\n      recommend: \"Yıllık belge tazeleme hatırlatıcısı.\"\n    },\n    {\n      code: \"F-04\", severity: \"ofi\",\n      title: \"Puan kartı otomasyonu\",\n      recommend: \"Manuel Excel yerine ERP raporu.\"\n    }\n  ],\n\n  conclusion: {\n    rating: \"İyileştirme Gerekli\",\n    text: \"Kontroller tanımlı ancak sistemsel olarak zorlanmıyor.\"\n  }\n}\n\n// ---------- TÜRETİLMİŞ ----------\n\nacik:   audit.findings where status == \"open\"\nmajors: audit.findings where severity == \"major\"\n\n// ---------- STİLLER ----------\n\nh1:    { size: 22, bold: true, after: 4 }\nh2:    { size: 14, bold: true, before: 22, after: 8 }\nh3:    { size: 12, bold: true, after: 6 }\nbody:  { size: 11, color: \"#333\", line: 1.5 }\nmuted: { size: 10, color: \"#888\", italic: true }\nlabel: { size: 10, bold: true, color: \"#666\", width: 90 }\n\nmajor: { color: \"#b00020\" }\nminor: { color: \"#b26a00\" }\nofi:   { color: \"#0a7d5a\" }\n\nrenk:  { major: major, minor: minor, ofi: ofi }\nad:    { major: \"Majör Uygunsuzluk\", minor: \"Minör Uygunsuzluk\", ofi: \"İyileştirme Fırsatı\" }\n\n// ---------- YARDIMCILAR ----------\n\nfunction alan(baslik, deger, stil = body) {\n  if (!deger) { return }\n  row({ after: 4 }) {\n    print(baslik, { style: label })\n    print(deger, { style: stil })\n  }\n}\n\nfunction bulgu(f, n) {\n  box({ border: \"#e2e2e2\", pad: 14, radius: 4, after: 12 }) {\n    print(\"${n}. ${f.code} — ${f.title}\", { style: style(h3, renk[f.severity]) })\n    print(ad[f.severity], { style: muted })\n\n    alan(\"Kriter\", f.criteria)\n    alan(\"Durum\", f.condition)\n    alan(\"Kanıt\", join(f.evidence), muted)\n    alan(\"Kök neden\", f.cause)\n    alan(\"Öneri\", f.recommend)\n\n    if (f.action) {\n      alan(\"Aksiyon\", \"${f.action.owner} · ${date(f.action.due)}\", muted)\n    } else if (f.severity == \"major\") {\n      print(\"! Majör bulgu için aksiyon tanımlanmamış.\", { style: style(body, major) })\n    }\n  }\n}\n\nfunction bolum(baslik, liste, bos = \"Bulunmamaktadır.\") {\n  print(baslik, { style: h2 })\n  if (count(liste) == 0) {\n    print(bos, { style: muted })\n    return\n  }\n  i: 0\n  for (f in liste) {\n    i: i + 1\n    bulgu(f, i)\n  }\n}\n\n// ---------- BASIM ----------\n\nheader({ center: audit.title, right: \"Rev 1.2\" })\nfooter({ left: \"Kuruma Özel\", right: \"Sayfa ${page} / ${pages}\" })\n\nprint(audit.title, { style: h1 })\nprint(\"${audit.id} · ${date(audit.period.from)} – ${date(audit.period.to)}\", { style: muted })\n\nprint(\"Yönetici Özeti\", { style: h2 })\nprint(\"${count(audit.findings)} bulgu tespit edilmiştir: ${count(majors)} majör, ${count(acik)} tanesi açık durumdadır.\", { style: body })\n\nif (count(majors) > 0) {\n  print(\"Majör uygunsuzluk mevcuttur; öncelikli aksiyon gerekmektedir.\",\n        { style: style(body, major, { bold: true }) })\n} else {\n  print(\"Majör uygunsuzluk bulunmamaktadır.\", { style: body })\n}\n\nprint(\"Kapsam\", { style: h2 })\nalan(\"Birim\", audit.auditee.unit)\nalan(\"Dönem\", \"${date(audit.period.from)} – ${date(audit.period.to)}\")\nalan(\"Kapsam içi\", audit.scope.in)\nalan(\"Kapsam dışı\", audit.scope.out, muted)\nalan(\"Örneklem\", \"${audit.scope.sampling.n} / ${audit.scope.sampling.of} sipariş\", muted)\n\nprint(\"Denetim kriterleri:\", { style: style(body, { before: 8 }) })\nfor (c in audit.scope.criteria) {\n  print(\"· ${c}\", { style: body })\n}\n\nprint(\"Bulgu Özeti\", { style: h2 })\ntable(audit.findings, {\n  headStyle: { size: 10, bold: true, color: \"#666\" },\n  border: \"#e2e2e2\",\n  zebra: \"#fafafa\"\n}) {\n  column(\"Kod\", \"code\", { width: 60 })\n  column(\"Bulgu\", \"title\")\n  column(\"Önem\", (f) => ad[f.severity], {\n    width: 130,\n    style: (f) => renk[f.severity]\n  })\n  column(\"Sorumlu\", \"action.owner\", { width: 110 })\n  column(\"Termin\", (f) => date(f.action.due), { width: 90, align: \"right\" })\n}\n\nnewpage()\n\nbolum(\"Majör Bulgular\", majors)\nbolum(\"Minör Bulgular\", audit.findings where severity == \"minor\")\nbolum(\"İyileştirme Fırsatları\", audit.findings where severity == \"ofi\",\n      \"Bu denetimde iyileştirme fırsatı kaydedilmemiştir.\")\n\nprint(\"Sonuç\", { style: h2 })\nalan(\"Değerlendirme\", audit.conclusion.rating)\nprint(audit.conclusion.text, { style: body })\nprint(\"Baş denetçi: ${audit.team.lead} · ${join(audit.team.auditors)}\", { style: muted })\n",
+
+  "Küçük başlangıç":
+`baslik: "İlk Rapor"
+h1:   { size: 22, bold: true, after: 6 }
+body: { size: 11, color: "#333", line: 1.5 }
+
+print(baslik, { style: h1 })
+print("Bu satır print ile basıldı.", { style: body })
+
+sayilar: [1, 2, 3, 4]
+for (n in sayilar) {
+  print("satır \${n}", { style: body })
+}
+`,
+
+  "Filtre ve fonksiyon":
+`bulgular: [
+  { kod: "F-01", onem: "major", baslik: "Onaysız alım", acik: true },
+  { kod: "F-02", onem: "minor", baslik: "Geciken değerlendirme", acik: false },
+  { kod: "F-03", onem: "major", baslik: "Eksik belge", acik: true }
+]
+
+h2:    { size: 14, bold: true, before: 16, after: 6 }
+body:  { size: 11, color: "#333", line: 1.5 }
+muted: { size: 10, color: "#888", italic: true }
+renk:  { major: { color: "#b00020" }, minor: { color: "#b26a00" } }
+
+majors: bulgular where onem == "major"
+acik:   bulgular where acik == true
+
+function bolum(baslik, liste) {
+  print(baslik, { style: h2 })
+  if (count(liste) == 0) {
+    print("Kayıt yok.", { style: muted })
+    return
+  }
+  i: 0
+  for (f in liste) {
+    i: i + 1
+    print("\${i}. \${f.kod} — \${f.baslik}", { style: style(body, renk[f.onem]) })
+  }
+}
+
+print("\${count(bulgular)} bulgu · \${count(majors)} majör · \${count(acik)} açık",
+      { style: muted })
+bolum("Majör", majors)
+bolum("Minör", bulgular where onem == "minor")
+bolum("Kritik", bulgular where onem == "kritik")
+`,
+
+  "Tablo":
+`satirlar: [
+  { kod: "F-01", baslik: "Onaysız alım", onem: "major",
+    aksiyon: { sorumlu: "BT", termin: "2026-09-30" } },
+  { kod: "F-02", baslik: "Geciken değerlendirme", onem: "minor",
+    aksiyon: { sorumlu: "Satınalma", termin: "2026-10-15" } },
+  { kod: "F-03", baslik: "Eksik belge", onem: "major" }
+]
+
+ad:   { major: "Majör", minor: "Minör" }
+renk: { major: { color: "#b00020" }, minor: { color: "#b26a00" } }
+h2:   { size: 14, bold: true, after: 8 }
+
+print("Bulgu Özeti", { style: h2 })
+table(satirlar, {
+  zebra: "#fafafa",
+  border: "#e2e2e2"
+}) {
+  column("Kod", "kod", { width: 60 })
+  column("Bulgu", "baslik")
+  column("Önem", (f) => ad[f.onem], {
+    style: (f) => renk[f.onem],
+    width: 90
+  })
+  column("Sorumlu", "aksiyon.sorumlu", { width: 100 })
+  column("Termin", (f) => date(f.aksiyon.termin), {
+    width: 90,
+    align: "right"
+  })
+}
+`
+};
+
+/* ================= düzenleyici ================= */
+(() => {
+
+const $ = (id) => document.getElementById(id);
+const src = $('src'), hl = $('hl'), gutter = $('gutter');
+const hata = $('hata'), durum = $('durum'), olcu = $('olcu');
+const onizleme = $('onizleme'), secim = $('ornek');
+
+let sonIyiHTML = '';
+let hataliSatir = 0;
+
+/* --- renklendirme --- */
+const KACIS = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
+const esc = (s) => s.replace(/[&<>]/g, (c) => KACIS[c]);
+
+const DESEN = new RegExp([
+  /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/,                                   // 1 yorum
+  /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/,                           // 2 metin
+  /\b(function|if|else|for|in|where|return|true|false|null)\b/,      // 3 anahtar
+  /\b(print|box|row|col|table|column|header|footer|newpage|style|count|join|sum|upper|lower|date)\b/, // 4 gömülü
+  /\b(\d+(?:\.\d+)?)\b/,                                             // 5 sayı
+  /([\p{L}_][\p{L}\p{N}_]*)(?=\s*:)/u,                               // 6 anahtar adı
+].map((r) => r.source).join('|'), 'gu');
+
+const SINIF = [null, 't-com', 't-str', 't-kw', 't-fn', 't-num', 't-key'];
+
+function renklendir(kod) {
+  let cikti = '', son = 0, m;
+  DESEN.lastIndex = 0;
+  while ((m = DESEN.exec(kod)) !== null) {
+    cikti += esc(kod.slice(son, m.index));
+    const g = m.findIndex((v, i) => i > 0 && v !== undefined);
+    cikti += `<span class="${SINIF[g]}">${esc(m[0])}</span>`;
+    son = m.index + m[0].length;
+  }
+  return cikti + esc(kod.slice(son)) + '\n';
+}
+
+function satirlariCiz(adet) {
+  let s = '';
+  for (let i = 1; i <= adet; i++) {
+    s += i === hataliSatir ? `<b class="bad">${i}</b>` : `<b>${i}</b>`;
+  }
+  gutter.innerHTML = s;
+}
+
+function tazele() {
+  hl.innerHTML = renklendir(src.value);
+  satirlariCiz(src.value.split('\n').length);
+  esitle();
+}
+
+function esitle() {
+  hl.scrollTop = src.scrollTop;
+  hl.scrollLeft = src.scrollLeft;
+  gutter.style.transform = `translateY(${-src.scrollTop}px)`;
+}
+
+/* --- derleme --- */
+
+function derle() {
+  const kaydirma = onizlemeKaydirma();
+  try {
+    const html = compile(src.value);
+    sonIyiHTML = html;
+    hataliSatir = 0;
+    hata.removeAttribute('data-on');
+    durum.dataset.state = 'ok';
+    durum.textContent = 'derlendi ' + new Date().toLocaleTimeString('tr-TR');
+    olcu.textContent = (html.length / 1024).toFixed(1) + ' KB';
+    yaz(html, kaydirma);
+  } catch (e) {
+    const mesaj = e.message || String(e);
+    const m = mesaj.match(/satır (\d+)/);
+    hataliSatir = m ? Number(m[1]) : 0;
+    hata.textContent = mesaj;
+    hata.setAttribute('data-on', '');
+    durum.dataset.state = 'hata';
+    durum.textContent = hataliSatir ? 'hata · satır ' + hataliSatir : 'hata';
+  }
+  satirlariCiz(src.value.split('\n').length);
+}
+
+function onizlemeKaydirma() {
+  try { return onizleme.contentWindow.scrollY || 0; } catch { return 0; }
+}
+
+function yaz(html, kaydirma) {
+  onizleme.onload = () => {
+    try { onizleme.contentWindow.scrollTo(0, kaydirma); } catch {}
+    onizleme.onload = null;
+  };
+  onizleme.srcdoc = html;
+}
+
+/* --- olaylar --- */
+
+let zaman;
+src.addEventListener('input', () => {
+  tazele();
+  clearTimeout(zaman);
+  zaman = setTimeout(derle, 300);
+});
+src.addEventListener('scroll', esitle);
+
+src.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const a = src.selectionStart, b = src.selectionEnd;
+    src.setRangeText('  ', a, b, 'end');
+    src.dispatchEvent(new Event('input'));
+  }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    clearTimeout(zaman);
+    derle();
+  }
+});
+
+$('derle').addEventListener('click', derle);
+
+$('indir').addEventListener('click', () => {
+  if (!sonIyiHTML) return;
+  const url = URL.createObjectURL(new Blob([sonIyiHTML], { type: 'text/html' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'rapor.html'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+secim.innerHTML = Object.keys(ORNEKLER)
+  .map((k) => `<option>${k}</option>`).join('');
+
+secim.addEventListener('change', () => {
+  src.value = ORNEKLER[secim.value];
+  src.scrollTop = 0;
+  tazele();
+  derle();
+});
+
+/* --- açılış --- */
+src.value = ORNEKLER[Object.keys(ORNEKLER)[0]];
+tazele();
+derle();
+
+})();
+</script>
+</body>
+</html>
