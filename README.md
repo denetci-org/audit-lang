@@ -2,6 +2,8 @@
 
 Denetim raporu yazmak için oluşturulmuş bir dildir.
 
+![Audit Lang](auditlang.png)
+
 ```bash
 node audit-lang.js ornek.audit > rapor.html
 ```
